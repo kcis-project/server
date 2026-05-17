@@ -4,7 +4,7 @@
 CREATE TABLE members (
   id               RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
   name             VARCHAR2(100) NOT NULL,
-  dept             VARCHAR2(200),
+  dept             VARCHAR2(1000),
   year             VARCHAR2(10),
   job_type         VARCHAR2(100),
   current_company  VARCHAR2(200),
