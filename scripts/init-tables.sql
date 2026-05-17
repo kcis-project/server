@@ -36,5 +36,5 @@ CREATE TABLE departments (
 CREATE INDEX idx_members_name ON members(LOWER(name));
 CREATE INDEX idx_members_job_type ON members(job_type);
 CREATE INDEX idx_members_dept ON members(dept);
-CREATE INDEX idx_companies_name ON companies(LOWER(name));
-CREATE INDEX idx_departments_name ON departments(LOWER(name));
+CREATE UNIQUE INDEX idx_companies_name_uniq ON companies(LOWER(name));
+CREATE UNIQUE INDEX idx_departments_name_uniq ON departments(LOWER(name));
