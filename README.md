@@ -1,6 +1,6 @@
 # KCIS Server
 
-KCIS 연명부 API 서버. Express.js + Oracle ATP.
+KCIS 연명부 API 서버. Express.js + Oracle ATP. CI/CD: GitHub Actions → SSH deploy (`.github/workflows/deploy.yml`).
 
 ## 실행
 
