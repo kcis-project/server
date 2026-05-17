@@ -1,0 +1,75 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: kcis-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: SSH redeploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Setup SSH key
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run redeploy on server
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kcis/server
+          git fetch --quiet origin main
+          BEFORE=$(git rev-parse HEAD)
+          git pull --ff-only origin main
+          AFTER=$(git rev-parse HEAD)
+          if [ "$BEFORE" = "$AFTER" ]; then
+            echo "변경 없음. PM2 reload 만 수행."
+          else
+            echo "$BEFORE → $AFTER"
+            # package.json/lock 이 바뀌었을 때만 npm ci (시간 절약 + 1GB RAM 보호)
+            if git diff --name-only "$BEFORE" "$AFTER" | grep -qE '^package(-lock)?\.json$'; then
+              echo "dependencies 변경 감지 → npm ci"
+              npm ci --omit=dev
+            fi
+            # Nginx 설정 변경이면 reload
+            if git diff --name-only "$BEFORE" "$AFTER" | grep -qE '^deploy/nginx-kcis\.conf$'; then
+              echo "nginx 설정 변경 감지 → sudo cp + reload"
+              sudo cp deploy/nginx-kcis.conf /etc/nginx/sites-available/kcis
+              sudo nginx -t && sudo systemctl reload nginx
+            fi
+          fi
+          pm2 reload kcis-api --update-env
+          pm2 status kcis-api
+          REMOTE
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 5 https://168-107-46-23.nip.io/health >/dev/null; then
+              echo "✅ health OK"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "❌ health check failed"
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
